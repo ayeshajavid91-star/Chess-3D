@@ -35,6 +35,7 @@
     background-image:
       radial-gradient(ellipse at 20% 20%, #2a1a0820 0%, transparent 60%),
       radial-gradient(ellipse at 80% 80%, #1a0a0215 0%, transparent 60%);
+    padding: 1rem;
   }
 
   h1 {
@@ -207,7 +208,6 @@
   .coords-file {
     display: flex;
     justify-content: space-around;
-    padding: 0 40px 0 40px;
     margin-top: 4px;
   }
 
@@ -258,6 +258,165 @@
 </div>
 
 <script>
+// ─── Sound System (Web Audio API — no files needed) ──────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function getAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    const ac = getAudio();
+    const now = ac.currentTime;
+
+    if (type === 'move') {
+      // Wooden piece thud
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      const dist = ac.createWaveShaper();
+      // Distortion curve for "wood" texture
+      const curve = new Float32Array(256);
+      for (let i=0;i<256;i++) { const x=i*2/256-1; curve[i]=x*(1+80*Math.abs(x))/(1+80); }
+      dist.curve = curve;
+      osc.connect(dist); dist.connect(gain); gain.connect(ac.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now); osc.stop(now + 0.13);
+
+      // Click transient
+      const buf = ac.createBuffer(1, ac.sampleRate * 0.05, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * Math.pow(1-i/data.length, 4);
+      const src = ac.createBufferSource();
+      const g2 = ac.createGain();
+      src.buffer = buf; src.connect(g2); g2.connect(ac.destination);
+      g2.gain.setValueAtTime(0.55, now);
+      src.start(now);
+
+    } else if (type === 'capture') {
+      // Heavier thud + crack
+      for (let i=0;i<2;i++) {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120 - i*30, now + i*0.03);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15 + i*0.03);
+        gain.gain.setValueAtTime(0.5 - i*0.1, now + i*0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now + i*0.03); osc.stop(now + 0.22);
+      }
+      const buf = ac.createBuffer(1, ac.sampleRate * 0.08, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * Math.pow(1-i/data.length, 2);
+      const src = ac.createBufferSource();
+      const g2 = ac.createGain();
+      src.buffer = buf; src.connect(g2); g2.connect(ac.destination);
+      g2.gain.setValueAtTime(0.7, now); src.start(now);
+
+    } else if (type === 'check') {
+      // Tense low rumble + high alert ping
+      const ping = ac.createOscillator();
+      const pgain = ac.createGain();
+      ping.connect(pgain); pgain.connect(ac.destination);
+      ping.type = 'sine';
+      ping.frequency.setValueAtTime(880, now);
+      ping.frequency.exponentialRampToValueAtTime(660, now + 0.3);
+      pgain.gain.setValueAtTime(0.3, now);
+      pgain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      ping.start(now); ping.stop(now + 0.4);
+
+      const rumble = ac.createOscillator();
+      const rgain = ac.createGain();
+      rumble.connect(rgain); rgain.connect(ac.destination);
+      rumble.type = 'sawtooth';
+      rumble.frequency.setValueAtTime(55, now);
+      rgain.gain.setValueAtTime(0.2, now);
+      rgain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      rumble.start(now); rumble.stop(now + 0.5);
+
+    } else if (type === 'castle') {
+      // Two wooden sounds in quick succession
+      for (let i=0;i<2;i++) {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, now + i*0.1);
+        osc.frequency.exponentialRampToValueAtTime(90, now + 0.08 + i*0.1);
+        gain.gain.setValueAtTime(0.35, now + i*0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12 + i*0.1);
+        osc.start(now + i*0.1); osc.stop(now + 0.14 + i*0.1);
+      }
+
+    } else if (type === 'promote') {
+      // Triumphant ascending tones
+      const freqs = [523, 659, 784, 1047];
+      freqs.forEach((f, i) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + i*0.1);
+        gain.gain.setValueAtTime(0.25, now + i*0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35 + i*0.1);
+        osc.start(now + i*0.1); osc.stop(now + 0.4 + i*0.1);
+      });
+
+    } else if (type === 'gameover') {
+      // Descending sad tones
+      const freqs = [440, 370, 311, 262];
+      freqs.forEach((f, i) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + i*0.22);
+        gain.gain.setValueAtTime(0.28, now + i*0.22);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5 + i*0.22);
+        osc.start(now + i*0.22); osc.stop(now + 0.55 + i*0.22);
+      });
+
+    } else if (type === 'win') {
+      // Victorious fanfare
+      const freqs = [523, 659, 784, 659, 1047];
+      const times = [0, 0.12, 0.24, 0.36, 0.48];
+      freqs.forEach((f, i) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(f, now + times[i]);
+        gain.gain.setValueAtTime(0.15, now + times[i]);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45 + times[i]);
+        osc.start(now + times[i]); osc.stop(now + 0.5 + times[i]);
+      });
+    }
+  } catch(e) { /* silence audio errors */ }
+}
+
+// ─── roundRect polyfill ───────────────────────────────────────
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2;
+    if (h < 2 * r) r = h / 2;
+    this.beginPath();
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y,     x + w, y + h, r);
+    this.arcTo(x + w, y + h, x,     y + h, r);
+    this.arcTo(x,     y + h, x,     y,     r);
+    this.arcTo(x,     y,     x + w, y,     r);
+    this.closePath();
+    return this;
+  };
+}
+
 // ─── Constants ───────────────────────────────────────────────
 const SQ = Math.min(Math.floor((Math.min(window.innerWidth, window.innerHeight) - 100) / 8), 80);
 const BOARD_PX = SQ * 8;
@@ -271,7 +430,6 @@ const RANKS = '87654321';
 
 // Build file labels
 const filesDiv = document.getElementById('files');
-filesDiv.style.paddingLeft = '0px';
 filesDiv.style.display = 'flex';
 filesDiv.style.justifyContent = 'space-around';
 filesDiv.style.width = BOARD_PX + 'px';
@@ -283,7 +441,7 @@ for (let i = 0; i < 8; i++) {
 }
 
 // ─── Game State ───────────────────────────────────────────────
-let board, selected, validMoves, turn, enPassant, castling, gameOver, moveHistory, aiTimer;
+let board, selected, validMoves, turn, enPassant, castling, gameOver, moveHistory;
 
 function initGame() {
   board = [
@@ -303,8 +461,8 @@ function initGame() {
   castling = { wK:true, wQ:true, bK:true, bQ:true };
   gameOver = false;
   moveHistory = [];
-  aiTimer = null;
   document.getElementById('overlay').classList.remove('show');
+  document.getElementById('overlay-msg').innerHTML = '';
   document.getElementById('move-list').innerHTML = '';
   updateStatus();
   render();
@@ -404,8 +562,11 @@ function hasAnyMove(col) {
 function applyMove(fr,fc,tr,tc) {
   const p = board[fr][fc]; const col = pcol(p);
   const notation = sqName(fr,fc)+'-'+sqName(tr,tc);
+  const isCapture = board[tr][tc] !== '.';
+  const isEP = p.toLowerCase()==='p' && board[tr][tc]==='.' && fc!==tc;
+  const isCastle = p.toLowerCase()==='k' && Math.abs(fc-tc)===2;
   // En passant capture
-  if (p.toLowerCase()==='p' && board[tr][tc]==='.' && fc!==tc) board[fr][tc]='.';
+  if (isEP) board[fr][tc]='.';
   // Castling rook
   if (p.toLowerCase()==='k') {
     if (fc===4&&tc===6) { board[fr][5]=board[fr][7]; board[fr][7]='.'; }
@@ -422,6 +583,10 @@ function applyMove(fr,fc,tr,tc) {
   enPassant = (p.toLowerCase()==='p' && Math.abs(tr-fr)===2) ? [(fr+tr)/2, fc] : null;
   board[tr][tc]=p; board[fr][fc]='.';
   turn = col==='white'?'black':'white';
+  // Sound
+  if (isCastle) playSound('castle');
+  else if (isCapture || isEP) playSound('capture');
+  else playSound('move');
   return notation;
 }
 
@@ -463,31 +628,191 @@ function promoteUI(r, c) {
   });
 }
 
-// ─── AI ──────────────────────────────────────────────────────
-const PIECE_VAL = { p:1, n:3, b:3, r:5, q:9, k:0 };
+// ─── AI (Minimax depth 3) ─────────────────────────────────────
+const PIECE_VAL = { p:100, n:320, b:330, r:500, q:900, k:20000 };
 
-function scoreMove(fr,fc,tr,tc) {
-  const target = board[tr][tc];
-  let score = target !== '.' ? PIECE_VAL[target.toLowerCase()] * 10 : 0;
-  score += Math.max(0, 3 - Math.abs(tr-3) - Math.abs(tc-3));
-  score += Math.random() * 3;
+// Piece-square tables for positional scoring
+const PST = {
+  p: [
+    [0,  0,  0,  0,  0,  0,  0,  0],
+    [50,50, 50, 50, 50, 50, 50, 50],
+    [10,10, 20, 30, 30, 20, 10, 10],
+    [5,  5, 10, 25, 25, 10,  5,  5],
+    [0,  0,  0, 20, 20,  0,  0,  0],
+    [5, -5,-10,  0,  0,-10, -5,  5],
+    [5, 10, 10,-20,-20, 10, 10,  5],
+    [0,  0,  0,  0,  0,  0,  0,  0]
+  ],
+  n: [
+    [-50,-40,-30,-30,-30,-30,-40,-50],
+    [-40,-20,  0,  0,  0,  0,-20,-40],
+    [-30,  0, 10, 15, 15, 10,  0,-30],
+    [-30,  5, 15, 20, 20, 15,  5,-30],
+    [-30,  0, 15, 20, 20, 15,  0,-30],
+    [-30,  5, 10, 15, 15, 10,  5,-30],
+    [-40,-20,  0,  5,  5,  0,-20,-40],
+    [-50,-40,-30,-30,-30,-30,-40,-50]
+  ],
+  b: [
+    [-20,-10,-10,-10,-10,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5, 10, 10,  5,  0,-10],
+    [-10,  5,  5, 10, 10,  5,  5,-10],
+    [-10,  0, 10, 10, 10, 10,  0,-10],
+    [-10, 10, 10, 10, 10, 10, 10,-10],
+    [-10,  5,  0,  0,  0,  0,  5,-10],
+    [-20,-10,-10,-10,-10,-10,-10,-20]
+  ],
+  r: [
+    [0,  0,  0,  0,  0,  0,  0,  0],
+    [5, 10, 10, 10, 10, 10, 10,  5],
+    [-5, 0,  0,  0,  0,  0,  0, -5],
+    [-5, 0,  0,  0,  0,  0,  0, -5],
+    [-5, 0,  0,  0,  0,  0,  0, -5],
+    [-5, 0,  0,  0,  0,  0,  0, -5],
+    [-5, 0,  0,  0,  0,  0,  0, -5],
+    [0,  0,  0,  5,  5,  0,  0,  0]
+  ],
+  q: [
+    [-20,-10,-10, -5, -5,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5,  5,  5,  5,  0,-10],
+    [-5,   0,  5,  5,  5,  5,  0, -5],
+    [0,    0,  5,  5,  5,  5,  0, -5],
+    [-10,  5,  5,  5,  5,  5,  0,-10],
+    [-10,  0,  5,  0,  0,  0,  0,-10],
+    [-20,-10,-10, -5, -5,-10,-10,-20]
+  ],
+  k: [
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-20,-30,-30,-40,-40,-30,-30,-20],
+    [-10,-20,-20,-20,-20,-20,-20,-10],
+    [20,  20,  0,  0,  0,  0, 20, 20],
+    [20,  30, 10,  0,  0, 10, 30, 20]
+  ]
+};
+
+function evalBoard(brd) {
+  let score = 0;
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const p = brd[r][c];
+      if (p==='.') continue;
+      const t = p.toLowerCase();
+      const val = PIECE_VAL[t] || 0;
+      const pstRow = isW(p) ? r : 7-r;
+      const pst = PST[t] ? PST[t][pstRow][c] : 0;
+      if (isW(p)) score += val + pst;
+      else score -= val + pst;
+    }
+  }
   return score;
 }
 
-function aiMove() {
-  const all = [];
+function getAllMovesForColor(brd, col, ep, cas) {
+  const moves = [];
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    if (pcol(brd[r][c])===col) {
+      for (const [nr,nc] of rawMoves(r,c,brd,ep)) {
+        const nb = brd.map(row=>[...row]);
+        if (brd[r][c].toLowerCase()==='p' && brd[nr][nc]==='.' && c!==nc) nb[r][nc]='.';
+        nb[nr][nc]=brd[r][c]; nb[r][c]='.';
+        if (!inCheckBoard(nb,col,null)) moves.push([r,c,nr,nc]);
+      }
+    }
+  }
+  return moves;
+}
+
+function inCheckBoard(brd, col, ep) {
+  const kpos = findKing(brd, col); if (!kpos) return false;
+  const [kr,kc] = kpos;
+  const opp = col==='white'?'black':'white';
   for (let r=0;r<8;r++) for (let c=0;c<8;c++)
-    if (pcol(board[r][c])==='black')
-      for (const [nr,nc] of legalMoves(r,c)) all.push([r,c,nr,nc]);
-  if (!all.length) return;
-  all.sort((a,b) => scoreMove(...b) - scoreMove(...a));
-  const top = all.slice(0, 5);
-  const [fr,fc,tr,tc] = top[Math.floor(Math.random()*top.length)];
+    if (pcol(brd[r][c])===opp)
+      if (rawMoves(r,c,brd,ep).some(([mr,mc])=>mr===kr&&mc===kc)) return true;
+  return false;
+}
+
+function applyMoveOnBoard(brd, fr, fc, tr, tc, cas) {
+  const newBrd = brd.map(r=>[...r]);
+  const newCas = {...cas};
+  const p = newBrd[fr][fc];
+  // En passant
+  if (p.toLowerCase()==='p' && newBrd[tr][tc]==='.' && fc!==tc) newBrd[fr][tc]='.';
+  // Castling rook
+  if (p.toLowerCase()==='k') {
+    if (fc===4&&tc===6) { newBrd[fr][5]=newBrd[fr][7]; newBrd[fr][7]='.'; }
+    if (fc===4&&tc===2) { newBrd[fr][3]=newBrd[fr][0]; newBrd[fr][0]='.'; }
+  }
+  if (p==='K') { newCas.wK=newCas.wQ=false; }
+  if (p==='k') { newCas.bK=newCas.bQ=false; }
+  const newEp = (p.toLowerCase()==='p' && Math.abs(tr-fr)===2) ? [(fr+tr)/2, fc] : null;
+  newBrd[tr][tc]=p; newBrd[fr][fc]='.';
+  // Auto-promote to queen for minimax
+  if (p==='p' && tr===7) newBrd[tr][tc]='q';
+  if (p==='P' && tr===0) newBrd[tr][tc]='Q';
+  return { brd: newBrd, ep: newEp, cas: newCas };
+}
+
+function minimax(brd, depth, alpha, beta, isMax, ep, cas) {
+  if (depth === 0) return evalBoard(brd);
+  const col = isMax ? 'black' : 'white';
+  const moves = getAllMovesForColor(brd, col, ep, cas);
+  if (moves.length === 0) {
+    if (inCheckBoard(brd, col, ep)) return isMax ? -99999 : 99999;
+    return 0; // stalemate
+  }
+  if (isMax) {
+    let best = -Infinity;
+    for (const [fr,fc,tr,tc] of moves) {
+      const { brd: nb, ep: nep, cas: ncas } = applyMoveOnBoard(brd,fr,fc,tr,tc,cas);
+      const score = minimax(nb, depth-1, alpha, beta, false, nep, ncas);
+      best = Math.max(best, score);
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const [fr,fc,tr,tc] of moves) {
+      const { brd: nb, ep: nep, cas: ncas } = applyMoveOnBoard(brd,fr,fc,tr,tc,cas);
+      const score = minimax(nb, depth-1, alpha, beta, true, nep, ncas);
+      best = Math.min(best, score);
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function aiMove() {
+  const moves = getAllMovesForColor(board, 'black', enPassant, castling);
+  if (!moves.length) return;
+
+  let bestScore = -Infinity;
+  let bestMove = null;
+
+  for (const [fr,fc,tr,tc] of moves) {
+    const { brd: nb, ep: nep, cas: ncas } = applyMoveOnBoard(board,fr,fc,tr,tc,castling);
+    const score = minimax(nb, 2, -Infinity, Infinity, false, nep, ncas);
+    if (score > bestScore || bestMove === null) {
+      bestScore = score;
+      bestMove = [fr,fc,tr,tc];
+    }
+  }
+
+  if (!bestMove) return;
+  const [fr,fc,tr,tc] = bestMove;
   const note = applyMove(fr,fc,tr,tc);
   recordMove(note, 'black');
   // AI promotion → always queen
   if (board[tr][tc].toLowerCase()==='p' && (tr===0||tr===7)) board[tr][tc]='q';
   checkGameOver();
+  if (!gameOver && inCheck(board, turn)) playSound('check');
   updateStatus();
   render();
 }
@@ -507,6 +832,8 @@ function endGame(msg) {
   document.getElementById('overlay').classList.add('show');
   document.getElementById('overlay-msg').textContent = msg;
   updateStatus();
+  if (msg.includes('You Win')) playSound('win');
+  else playSound('gameover');
 }
 
 function updateStatus() {
@@ -517,33 +844,20 @@ function updateStatus() {
 }
 
 // ─── Drawing ─────────────────────────────────────────────────
-function darken(hex, amt) {
-  let r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-  const to = x => Math.max(0,x-amt).toString(16).padStart(2,'0');
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-function lighten(hex, amt) {
-  let r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-  const to = x => Math.min(255,x+amt).toString(16).padStart(2,'0');
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-
 function drawBoard() {
   for (let r=0;r<8;r++) {
     for (let c=0;c<8;c++) {
       const x=c*SQ, y=r*SQ;
       const isLight = (r+c)%2===0;
-      // Check highlight
-      const [kr,kc] = findKing(board, turn) || [-1,-1];
+      const kpos = findKing(board, turn) || [-1,-1];
+      const [kr,kc] = kpos;
       if (inCheck(board,turn) && r===kr && c===kc) ctx.fillStyle='#cc3333';
       else ctx.fillStyle = isLight ? '#f0d9b5' : '#b58863';
       ctx.fillRect(x,y,SQ,SQ);
-      // Selected
       if (selected && selected[0]===r && selected[1]===c) {
         ctx.fillStyle='rgba(255,215,0,0.45)';
         ctx.fillRect(x,y,SQ,SQ);
       }
-      // Valid moves
       if (validMoves.some(([mr,mc])=>mr===r&&mc===c)) {
         if (board[r][c]!=='.') {
           ctx.fillStyle='rgba(200,50,50,0.45)';
@@ -555,7 +869,6 @@ function drawBoard() {
           ctx.fill();
         }
       }
-      // Rank labels (left edge)
       if (c===0) {
         ctx.fillStyle = isLight ? '#b58863' : '#f0d9b5';
         ctx.font = `bold ${Math.floor(SQ*0.18)}px Cinzel, serif`;
@@ -568,8 +881,6 @@ function drawBoard() {
 function draw3DPiece(cx, cy, isWhite, type) {
   const z = SQ * 0.38;
   const col = isWhite ? '#ede0c8' : '#3c2e26';
-  const shadow = isWhite ? '#b0a090' : '#120e0a';
-  const hi = isWhite ? '#ffffff' : '#5a4a3a';
 
   function dk(c, a) {
     const r=parseInt(c.slice(1,3),16), g=parseInt(c.slice(3,5),16), b=parseInt(c.slice(5,7),16);
@@ -580,18 +891,14 @@ function draw3DPiece(cx, cy, isWhite, type) {
     return `rgb(${Math.min(255,r+a)},${Math.min(255,g+a)},${Math.min(255,b+a)})`;
   }
 
-  // Shadow under piece
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath(); ctx.ellipse(cx+z*0.05, cy+z*0.55, z*0.38, z*0.14, 0, 0, Math.PI*2); ctx.fill();
 
   if (type==='p') {
-    // Base
     ctx.fillStyle=dk(col,40); ctx.beginPath(); ctx.ellipse(cx+1,cy+z*0.45+1,z*0.35,z*0.16,0,0,Math.PI*2); ctx.fill();
     ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(cx,cy+z*0.45,z*0.35,z*0.16,0,0,Math.PI*2); ctx.fill();
-    // Stem
     ctx.fillStyle=dk(col,25); ctx.fillRect(cx-z*0.1+1,cy-z*0.12+1,z*0.2,z*0.55);
     ctx.fillStyle=col; ctx.fillRect(cx-z*0.1,cy-z*0.12,z*0.2,z*0.55);
-    // Head
     ctx.fillStyle=dk(col,25); ctx.beginPath(); ctx.arc(cx+1,cy-z*0.2+1,z*0.28,0,Math.PI*2); ctx.fill();
     ctx.fillStyle=col; ctx.beginPath(); ctx.arc(cx,cy-z*0.2,z*0.28,0,Math.PI*2); ctx.fill();
     ctx.fillStyle=lt(col,60); ctx.beginPath(); ctx.arc(cx-z*0.1,cy-z*0.3,z*0.1,0,Math.PI*2); ctx.fill();
@@ -652,7 +959,6 @@ function draw3DPiece(cx, cy, isWhite, type) {
     ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(cx+kb[0][0],cy+kb[0][1]); kb.slice(1).forEach(([x,y])=>ctx.lineTo(cx+x,cy+y)); ctx.closePath(); ctx.fill();
     ctx.fillStyle=dk(col,18); ctx.fillRect(cx-z*0.22+1,cy-z*0.42+1,z*0.44,z*0.18);
     ctx.fillStyle=col; ctx.fillRect(cx-z*0.22,cy-z*0.42,z*0.44,z*0.18);
-    // Cross
     ctx.fillStyle=lt(col,30);
     ctx.fillRect(cx-z*0.08,cy-z*0.62,z*0.16,z*0.36);
     ctx.fillRect(cx-z*0.22,cy-z*0.52,z*0.44,z*0.14);
@@ -665,10 +971,9 @@ function draw3DPiece(cx, cy, isWhite, type) {
   ctx.font = `bold ${fontSize}px Cinzel, serif`;
   ctx.textAlign = 'center';
   const tw = ctx.measureText(name).width;
-  // Pill bg
   const ny = cy + z*0.68;
   ctx.fillStyle = isWhite ? 'rgba(220,200,170,0.82)' : 'rgba(20,12,8,0.82)';
-  ctx.beginPath();
+  // Use polyfilled roundRect
   ctx.roundRect(cx - tw/2 - 3, ny - fontSize*0.9, tw + 6, fontSize*1.1 + 2, 3);
   ctx.fill();
   ctx.fillStyle = isWhite ? '#3a2a1a' : '#d4b896';
@@ -693,13 +998,17 @@ function render() {
   drawPieces();
 }
 
-// ─── Input ───────────────────────────────────────────────────
+// ─── FIX: Input — correct click coordinate calculation ────────
 canvas.addEventListener('click', async (e) => {
   if (gameOver || turn !== 'white') return;
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left, y = e.clientY - rect.top;
-  const c = Math.floor(x / SQ * canvas.width / rect.width / SQ);
-  const r = Math.floor(y / SQ * canvas.height / rect.height / SQ);
+  // FIXED: correct scaling — map click to canvas logical pixels
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  const c = Math.floor(x / SQ);
+  const r = Math.floor(y / SQ);
   if (!inBounds(r,c)) return;
 
   if (selected === null) {
@@ -710,19 +1019,19 @@ canvas.addEventListener('click', async (e) => {
   } else {
     const hit = validMoves.find(([mr,mc])=>mr===r&&mc===c);
     if (hit) {
-      const col = 'white';
       const note = applyMove(selected[0],selected[1],r,c);
       // Promotion
       if (board[r][c].toLowerCase()==='p' && (r===0||r===7)) {
         const ch = await promoteUI(r,c);
         board[r][c] = ch;
+        playSound('promote');
       }
-      recordMove(note, col);
+      recordMove(note, 'white');
       selected=null; validMoves=[];
       checkGameOver();
+      if (!gameOver && inCheck(board, turn)) playSound('check');
       updateStatus();
       render();
-      // Schedule AI
       if (!gameOver) {
         setTimeout(() => { aiMove(); }, 650);
       }
@@ -740,9 +1049,6 @@ function resignGame() {
   if (!gameOver) endGame('⚑ You Resigned — AI Wins!');
   render();
 }
-
-// ─── Fix canvas click scaling ─────────────────────────────────
-canvas.addEventListener('click', () => {}, false);
 
 // ─── Start ───────────────────────────────────────────────────
 initGame();
